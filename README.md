@@ -1,6 +1,6 @@
 # Claude Code as a Windows Service (ccrcas)
 
-Run [Claude Code](https://docs.anthropic.com/en/docs/claude-code) as a Windows service using **SrvAny** from the Windows Server Resource Kit. The service runs under a dedicated local user account and authenticates with Anthropic via **OAuth (Google account sign-in)**.
+Run [Claude Code](https://docs.anthropic.com/en/docs/claude-code) as a Windows service using **[srvany-ng](https://github.com/birkett/srvany-ng)** (an open-source, maintained replacement for the legacy SrvAny from the Windows Server Resource Kit). The service runs under a dedicated local user account and authenticates with Anthropic via **OAuth (Google account sign-in)**.
 
 Configuration and OAuth tokens are isolated in a dedicated service directory (`C:\ClaudeCode` by default), so the service runs independently of any user session.
 
@@ -10,9 +10,9 @@ Configuration and OAuth tokens are isolated in a dedicated service directory (`C
 2. **Claude Code CLI** installed and working from a regular command prompt
    - Verify: open `cmd` and run `claude --version`
    - Install: `npm install -g @anthropic-ai/claude-code` (requires Node.js 18+)
-3. **SrvAny.exe** from the Windows Server 2003 Resource Kit Tools
-   - Download the Resource Kit, or obtain `srvany.exe` separately
-   - Place it next to the install script or note its full path
+3. **srvany-ng.exe** — download from [GitHub releases](https://github.com/birkett/srvany-ng/releases)
+   - Grab the latest `.zip`, extract `x64\srvany-ng.exe` (or `x86\` for 32-bit systems)
+   - Place `srvany-ng.exe` next to the install script or note its full path
 4. **Administrator access** on the target machine
 5. **An Anthropic account** with Google sign-in (OAuth) configured
 
@@ -23,7 +23,7 @@ Configuration and OAuth tokens are isolated in a dedicated service directory (`C
 | `install-service.ps1` | Creates the ClaudeCode Windows service, directories, and registry entries |
 | `uninstall-service.ps1` | Removes the service (optionally removes all files) |
 | `authenticate.ps1` | Handles interactive OAuth login and copies tokens to the service directory |
-| `claude-code-wrapper.bat` | Template wrapper script that SrvAny executes |
+| `claude-code-wrapper.bat` | Template wrapper script that srvany-ng executes |
 
 ## Directory Layout
 
@@ -31,8 +31,8 @@ After installation, `C:\ClaudeCode` (configurable) will contain:
 
 ```
 C:\ClaudeCode\
-  srvany.exe                    # Service helper binary
-  claude-code-wrapper.bat       # Wrapper script invoked by SrvAny
+  srvany-ng.exe                  # Service helper binary (from GitHub)
+  claude-code-wrapper.bat       # Wrapper script invoked by srvany-ng
   config\                       # Acts as HOME for the service process
     .claude\                    # Claude Code config + OAuth tokens
       credentials.json          # OAuth tokens (created by authenticate.ps1)
@@ -77,7 +77,7 @@ cd C:\path\to\ccrcas
 
 # Full options example
 .\install-service.ps1 `
-    -SrvAnyPath "C:\tools\srvany.exe" `
+    -SrvAnyPath "C:\path\to\srvany-ng.exe" `
     -ServiceUser ".\claude-svc" `
     -ServicePassword "YourStrongPassword123!" `
     -InstallDir "C:\ClaudeCode" `
@@ -89,7 +89,7 @@ cd C:\path\to\ccrcas
 
 | Parameter | Default | Description |
 |---|---|---|
-| `-SrvAnyPath` | Auto-detect | Full path to `srvany.exe` |
+| `-SrvAnyPath` | Auto-detect | Full path to `srvany-ng.exe` |
 | `-ServiceUser` | LocalSystem | Account to run the service as (e.g., `.\claude-svc`) |
 | `-ServicePassword` | *(prompt)* | Password for the service account |
 | `-InstallDir` | `C:\ClaudeCode` | Where service files, config, and logs live |
@@ -228,7 +228,7 @@ Check the service logs for messages like:
 
 ### Service fails to start immediately (Error 1053)
 
-SrvAny expects the wrapped application to keep running. If `claude` exits immediately, the service will report a timeout. Common causes:
+srvany-ng expects the wrapped application to keep running. If `claude` exits immediately, the service will report a timeout. Common causes:
 
 - **Missing OAuth tokens**: Run `authenticate.ps1` to complete the Google sign-in flow
 - **Expired tokens**: Re-authenticate with `authenticate.ps1 -ServiceUser "claude-svc"`
@@ -253,7 +253,7 @@ runas /user:claude-svc cmd
 
 ### Verifying the registry configuration
 
-The install script writes SrvAny parameters to the registry. To inspect:
+The install script writes srvany-ng parameters to the registry. To inspect:
 
 ```powershell
 Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\ClaudeCode\Parameters"
@@ -277,7 +277,7 @@ SET NODE_EXTRA_CA_CERTS=C:\certs\corp-ca.pem
 
 ## How It Works
 
-1. **SrvAny** is a generic service wrapper: Windows SCM starts `srvany.exe`, which reads `Application` and `AppDirectory` from its registry `Parameters` subkey and launches that process
+1. **srvany-ng** is a generic service wrapper: Windows SCM starts `srvany-ng.exe`, which reads `Application` and `AppDirectory` from its registry `Parameters` subkey and launches that process
 2. The `Application` points to `claude-code-wrapper.bat`, which overrides `HOME` and `USERPROFILE` to point at the service directory, so Claude Code reads OAuth tokens from there instead of a user profile
 3. **OAuth flow**: `authenticate.ps1` runs the browser-based Google sign-in interactively as the service user, then copies the resulting tokens (including the refresh token) into the service config directory
 4. At runtime, Claude Code uses the stored refresh token to obtain fresh access tokens automatically, without needing a browser

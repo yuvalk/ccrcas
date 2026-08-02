@@ -7,5 +7,6 @@ config/.claude.json
 # Logs
 logs/
 
-# SrvAny binary
+# SrvAny binary (not committed by default - download from GitHub releases)
+srvany-ng.exe
 srvany.exe

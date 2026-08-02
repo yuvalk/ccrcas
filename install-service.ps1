@@ -1,12 +1,13 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Installs Claude Code as a Windows service using SrvAny.
+    Installs Claude Code as a Windows service using srvany-ng.
 .DESCRIPTION
     Creates a Windows service named "ClaudeCode" that runs Claude Code
-    via SrvAny from the Windows Server 2003 Resource Kit.
+    via srvany-ng (open-source drop-in replacement for SrvAny).
+    Download from: https://github.com/birkett/srvany-ng/releases
 .PARAMETER SrvAnyPath
-    Full path to srvany.exe. Defaults to searching common locations.
+    Full path to srvany-ng.exe. Defaults to searching common locations.
 .PARAMETER ServiceUser
     Local user account to run the service as (e.g., ".\claude-svc").
     If omitted, runs as LocalSystem (not recommended).
@@ -37,10 +38,11 @@ $ServiceDescription = "Runs Anthropic Claude Code CLI as a Windows service"
 
 function Find-SrvAny {
     $searchPaths = @(
+        "$PSScriptRoot\srvany-ng.exe",
         "$PSScriptRoot\srvany.exe",
-        "C:\Program Files (x86)\Windows Resource Kits\Tools\srvany.exe",
-        "C:\Program Files\Windows Resource Kits\Tools\srvany.exe",
-        "$env:SystemRoot\srvany.exe"
+        "C:\Program Files (x86)\Windows Resource Kits\Tools\srvany-ng.exe",
+        "C:\Program Files\Windows Resource Kits\Tools\srvany-ng.exe",
+        "$env:SystemRoot\srvany-ng.exe"
     )
     foreach ($p in $searchPaths) {
         if (Test-Path $p) { return $p }
@@ -68,15 +70,15 @@ function Find-ClaudeExe {
 Write-Host "=== Claude Code Service Installer ===" -ForegroundColor Cyan
 Write-Host ""
 
-# Locate srvany.exe
+# Locate srvany-ng.exe
 if (-not $SrvAnyPath) {
     $SrvAnyPath = Find-SrvAny
 }
 if (-not $SrvAnyPath -or -not (Test-Path $SrvAnyPath)) {
-    Write-Error "srvany.exe not found. Provide -SrvAnyPath or place srvany.exe next to this script."
+    Write-Error "srvany-ng.exe not found. Download it from https://github.com/birkett/srvany-ng/releases and place it next to this script, or provide -SrvAnyPath."
     exit 1
 }
-Write-Host "[OK] srvany.exe found: $SrvAnyPath" -ForegroundColor Green
+Write-Host "[OK] srvany-ng found: $SrvAnyPath" -ForegroundColor Green
 
 # Locate claude.exe
 if (-not $ClaudeExePath) {
@@ -112,8 +114,8 @@ foreach ($d in $dirs) {
     }
 }
 
-# Copy srvany.exe into the install directory
-Copy-Item -Path $SrvAnyPath -Destination "$InstallDir\srvany.exe" -Force
+# Copy srvany-ng.exe into the install directory
+Copy-Item -Path $SrvAnyPath -Destination "$InstallDir\srvany-ng.exe" -Force
 Write-Host "[OK] Directory structure created" -ForegroundColor Green
 
 # --- Create the wrapper batch file ---
@@ -157,7 +159,7 @@ Write-Host "[OK] Wrapper script created: $wrapperPath" -ForegroundColor Green
 Write-Host ""
 Write-Host "Creating Windows service '$ServiceName' ..." -ForegroundColor Yellow
 
-$srvanyDest = "$InstallDir\srvany.exe"
+$srvanyDest = "$InstallDir\srvany-ng.exe"
 $scArgs = @("create", $ServiceName, "binPath=", "`"$srvanyDest`"", "start=", "demand", "DisplayName=", "`"$ServiceDisplayName`"")
 $result = & sc.exe $scArgs 2>&1
 if ($LASTEXITCODE -ne 0) {
