@@ -100,9 +100,21 @@ cd C:\path\to\ccrcas
 | `-ClaudeExePath` | Auto-detect | Full path to the `claude` CLI binary |
 | `-ClaudeArgs` | *(empty)* | Arguments passed to `claude` (e.g., `--print`) |
 
-### Step 3: Authenticate with Anthropic (OAuth / Google)
+### Step 3: Copy Your User Configuration
 
-Claude Code authenticates via a browser-based OAuth flow (Google sign-in). Since a Windows service cannot open a browser, you must authenticate interactively first, then copy the tokens to the service directory.
+The quickest way to get the service running with your existing credentials, project settings, and workspace trust is to copy your user's `.claude` directory into the service config directory:
+
+```powershell
+Copy-Item -Recurse "$env:USERPROFILE\.claude\*" "C:\ClaudeCode\config\.claude\" -Force
+```
+
+This brings over everything Claude Code needs: OAuth tokens, settings, project-specific configuration, and trusted workspace records.
+
+> **Note:** If your tokens expire later or you need to authenticate from scratch, use `authenticate.ps1` (see below).
+
+### Step 4: Authenticate with Anthropic (OAuth / Google)
+
+If you didn't copy your config in Step 3, or if you need to authenticate fresh, Claude Code uses a browser-based OAuth flow (Google sign-in). Since a Windows service cannot open a browser, you must authenticate interactively first, then copy the tokens to the service directory.
 
 The `authenticate.ps1` script handles this:
 
@@ -152,7 +164,7 @@ Copy-Item -Recurse "C:\Users\claude-svc\.claude\*" "C:\ClaudeCode\config\.claude
 icacls "C:\ClaudeCode" /grant "claude-svc:(OI)(CI)RX" /T
 ```
 
-### Step 4: Start the Service
+### Step 5: Start the Service
 
 ```powershell
 # Start the service
@@ -164,7 +176,7 @@ Get-Service ClaudeCode
 
 You can also start/stop from the Services GUI (`services.msc`).
 
-### Step 5: Check the Logs
+### Step 6: Check the Logs
 
 ```powershell
 # View today's log
