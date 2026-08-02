@@ -30,7 +30,7 @@ Configuration and OAuth tokens are isolated in a dedicated service directory (`C
 After installation, `C:\ClaudeCode` (configurable) will contain:
 
 ```
-C:\ClaudeCode\
+C:\ClaudeCode\                    # Install directory (service binaries + config)
   srvany-ng.exe                  # Service helper binary (from GitHub)
   claude-code-wrapper.bat       # Wrapper script invoked by srvany-ng
   config\                       # Acts as HOME for the service process
@@ -39,6 +39,8 @@ C:\ClaudeCode\
       settings.json             # Claude Code settings
   logs\                         # Service log output
     claude-code-YYYYMMDD.log
+
+C:\ClaudeCodeWorkspace\           # Workspace directory (where Claude Code operates)
 ```
 
 ## Step-by-Step Installation
@@ -81,6 +83,7 @@ cd C:\path\to\ccrcas
     -ServiceUser ".\claude-svc" `
     -ServicePassword "YourStrongPassword123!" `
     -InstallDir "C:\ClaudeCode" `
+    -WorkspaceDir "C:\ClaudeCodeWorkspace" `
     -ClaudeExePath "C:\Users\you\AppData\Roaming\npm\claude.cmd" `
     -ClaudeArgs "--print"
 ```
@@ -93,6 +96,7 @@ cd C:\path\to\ccrcas
 | `-ServiceUser` | LocalSystem | Account to run the service as (e.g., `.\claude-svc`) |
 | `-ServicePassword` | *(prompt)* | Password for the service account |
 | `-InstallDir` | `C:\ClaudeCode` | Where service files, config, and logs live |
+| `-WorkspaceDir` | `C:\ClaudeCodeWorkspace` | Working directory where Claude Code operates |
 | `-ClaudeExePath` | Auto-detect | Full path to the `claude` CLI binary |
 | `-ClaudeArgs` | *(empty)* | Arguments passed to `claude` (e.g., `--print`) |
 
@@ -110,14 +114,16 @@ The `authenticate.ps1` script handles this:
 **What this does:**
 
 1. Opens a command prompt running as the `claude-svc` user
-2. You run `claude auth login` in that prompt
-3. A browser window opens for Google OAuth sign-in
-4. You sign in with your Google account linked to your Anthropic account
-5. After successful auth, close the command prompt
-6. The script copies the resulting OAuth tokens from `claude-svc`'s profile into `C:\ClaudeCode\config\.claude\`
+2. You run `claude auth login` — a browser opens for Google OAuth sign-in
+3. You sign in with your Google account linked to your Anthropic account
+4. You `cd` into the workspace directory and run `claude` to **trust the workspace** when prompted (then exit)
+5. After completing both steps, close the command prompt
+6. The script copies the resulting OAuth tokens and workspace trust settings from `claude-svc`'s profile into `C:\ClaudeCode\config\.claude\`
 7. Sets file permissions so the service can read the tokens
 
 > **Note:** Claude Code stores OAuth refresh tokens that allow it to obtain new access tokens automatically. As long as the refresh token remains valid, the service can authenticate without user interaction.
+
+> **Important:** You must trust the workspace directory during this step. If you skip it, the service will fail with a "workspace not trusted" error because it cannot prompt interactively.
 
 #### Manual alternative
 
@@ -131,7 +137,11 @@ runas /user:claude-svc cmd
 claude auth login
 # Complete the Google OAuth flow in the browser
 
-# After auth succeeds, copy the tokens:
+# Then trust the workspace:
+cd C:\ClaudeCodeWorkspace
+claude
+# Accept the workspace trust prompt, then exit claude
+
 exit
 ```
 

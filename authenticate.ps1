@@ -17,6 +17,10 @@
     The local service account (e.g., "claude-svc"). Do not include domain prefix.
 .PARAMETER InstallDir
     Service install directory. Defaults to C:\ClaudeCode.
+.PARAMETER WorkspaceDir
+    The workspace directory that Claude Code will operate in.
+    The script will have you trust this workspace during setup.
+    Defaults to C:\ClaudeCodeWorkspace.
 .PARAMETER SkipInteractive
     Skip the interactive login step. Use this if you already authenticated as the
     service user and just want to copy the tokens.
@@ -26,6 +30,7 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$ServiceUser,
     [string]$InstallDir = "C:\ClaudeCode",
+    [string]$WorkspaceDir = "C:\ClaudeCodeWorkspace",
     [switch]$SkipInteractive
 )
 
@@ -42,25 +47,29 @@ $userClaudeDir = "$userProfile\.claude"
 
 if (-not $SkipInteractive) {
     Write-Host "This will open an interactive command prompt as '$ServiceUser'." -ForegroundColor Yellow
-    Write-Host "In that prompt, run:" -ForegroundColor Yellow
+    Write-Host "In that prompt, run these commands:" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "    claude auth login" -ForegroundColor White
+    Write-Host "    1. claude auth login" -ForegroundColor White
+    Write-Host "       (Complete the Google OAuth sign-in in the browser)" -ForegroundColor DarkYellow
     Write-Host ""
-    Write-Host "A browser window will open for Google OAuth sign-in." -ForegroundColor Yellow
-    Write-Host "Complete the sign-in, then close the command prompt when done." -ForegroundColor Yellow
+    Write-Host "    2. cd $WorkspaceDir" -ForegroundColor White
+    Write-Host "       claude" -ForegroundColor White
+    Write-Host "       (Trust the workspace when prompted, then exit claude)" -ForegroundColor DarkYellow
+    Write-Host ""
+    Write-Host "    3. Close the command prompt when done." -ForegroundColor Yellow
     Write-Host ""
 
     $confirm = Read-Host "Press Enter to continue (or 'q' to quit)"
     if ($confirm -eq 'q') { exit 0 }
 
-    # Launch interactive cmd as the service user
+    # Launch interactive cmd as the service user in the workspace directory
     Write-Host "Opening command prompt as '$ServiceUser' ..." -ForegroundColor Yellow
     Write-Host "(You may be prompted for the service account password)" -ForegroundColor DarkYellow
     Write-Host ""
 
     try {
         $process = Start-Process -FilePath "runas.exe" `
-            -ArgumentList "/user:$env:COMPUTERNAME\$ServiceUser", "cmd.exe /K echo Ready. Run: claude auth login" `
+            -ArgumentList "/user:$env:COMPUTERNAME\$ServiceUser", "cmd.exe /K echo Ready. Run: claude auth login && cd /d $WorkspaceDir" `
             -PassThru -Wait
     } catch {
         Write-Error "Failed to launch interactive prompt: $_"

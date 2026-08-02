@@ -19,6 +19,10 @@
 .PARAMETER ClaudeExePath
     Full path to the claude.exe CLI binary.
     If omitted, attempts to find it in PATH or common install locations.
+.PARAMETER WorkspaceDir
+    The working directory where Claude Code will operate.
+    This is the project/workspace directory Claude Code runs in.
+    Defaults to C:\ClaudeCodeWorkspace.
 .PARAMETER ClaudeArgs
     Arguments to pass to claude.exe. Defaults to "--print" for non-interactive mode.
 #>
@@ -28,6 +32,7 @@ param(
     [string]$ServiceUser,
     [string]$ServicePassword,
     [string]$InstallDir = "C:\ClaudeCode",
+    [string]$WorkspaceDir = "C:\ClaudeCodeWorkspace",
     [string]$ClaudeExePath,
     [string]$ClaudeArgs = ""
 )
@@ -106,7 +111,8 @@ $dirs = @(
     $InstallDir,
     "$InstallDir\config",
     "$InstallDir\config\.claude",
-    "$InstallDir\logs"
+    "$InstallDir\logs",
+    $WorkspaceDir
 )
 foreach ($d in $dirs) {
     if (-not (Test-Path $d)) {
@@ -143,11 +149,14 @@ REM SET NODE_EXTRA_CA_CERTS=C:\certs\corp-ca.pem
 REM Uncomment to use an API key instead of OAuth:
 REM SET ANTHROPIC_API_KEY=sk-ant-api03-...
 
+REM Change to the workspace directory where Claude Code operates.
+cd /d "$WorkspaceDir"
+
 REM Log output
 SET LOG_DIR=$InstallDir\logs
 SET LOG_FILE=%LOG_DIR%\claude-code-%DATE:~-4%%DATE:~4,2%%DATE:~7,2%.log
 
-echo [%DATE% %TIME%] Starting Claude Code service >> "%LOG_FILE%" 2>&1
+echo [%DATE% %TIME%] Starting Claude Code service in $WorkspaceDir >> "%LOG_FILE%" 2>&1
 "$ClaudeExePath" $ClaudeArgs >> "%LOG_FILE%" 2>&1
 echo [%DATE% %TIME%] Claude Code exited with code %ERRORLEVEL% >> "%LOG_FILE%" 2>&1
 "@
@@ -187,12 +196,14 @@ if ($ServiceUser) {
     & sc.exe config $ServiceName obj= "$ServiceUser" password= "$ServicePassword" | Out-Null
     Write-Host "[OK] Service configured to run as: $ServiceUser" -ForegroundColor Green
 
-    # Make the service user the owner of the install directory and grant full control
+    # Make the service user the owner of the install and workspace directories
     $userName = $ServiceUser -replace '^\.\\', ''
-    & takeown /F $InstallDir /R /A /D Y 2>&1 | Out-Null
-    & icacls $InstallDir /setowner "$userName" /T /Q 2>&1 | Out-Null
-    & icacls $InstallDir /grant "${userName}:(OI)(CI)F" /T /Q 2>&1 | Out-Null
-    Write-Host "[OK] '$userName' set as owner of $InstallDir with full control" -ForegroundColor Green
+    foreach ($dir in @($InstallDir, $WorkspaceDir)) {
+        & takeown /F $dir /R /A /D Y 2>&1 | Out-Null
+        & icacls $dir /setowner "$userName" /T /Q 2>&1 | Out-Null
+        & icacls $dir /grant "${userName}:(OI)(CI)F" /T /Q 2>&1 | Out-Null
+    }
+    Write-Host "[OK] '$userName' set as owner of $InstallDir and $WorkspaceDir" -ForegroundColor Green
 
     # Grant logon-as-a-service right
     Write-Host "     (Ensure '$ServiceUser' has 'Log on as a service' right via Local Security Policy)" -ForegroundColor DarkYellow
@@ -249,11 +260,12 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host " Installation Complete!" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Install directory : $InstallDir"
-Write-Host "Service name      : $ServiceName"
-Write-Host "Wrapper script    : $wrapperPath"
-Write-Host "Config directory  : $InstallDir\config"
-Write-Host "Log directory     : $InstallDir\logs"
+Write-Host "Install directory  : $InstallDir"
+Write-Host "Workspace directory: $WorkspaceDir"
+Write-Host "Service name       : $ServiceName"
+Write-Host "Wrapper script     : $wrapperPath"
+Write-Host "Config directory   : $InstallDir\config"
+Write-Host "Log directory      : $InstallDir\logs"
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Authenticate (OAuth with Google):"
