@@ -1,0 +1,31 @@
+Claude Code Service - Configuration Directory
+==============================================
+
+Copy your Claude Code configuration and authentication files here.
+
+This directory acts as HOME for the Claude Code process running
+as a Windows service. The service looks here for all config and
+credentials instead of a user profile directory.
+
+Files you need to copy from your user profile
+----------------------------------------------
+
+From %USERPROFILE%\.claude\ copy to config\.claude\:
+
+  credentials.json       - API key or OAuth authentication credentials
+  settings.json          - Claude Code settings (model, permissions, etc.)
+  projects\              - Project-specific settings and CLAUDE.md overrides
+
+If you use an API key directly, you can also set it via environment
+variable in the wrapper batch file instead of copying credentials:
+
+  SET ANTHROPIC_API_KEY=sk-ant-...
+
+Where are the originals?
+------------------------
+
+  Windows:  %USERPROFILE%\.claude\
+  Example:  C:\Users\YourName\.claude\
+
+After copying, verify that the service account has read access to
+all files in this directory.

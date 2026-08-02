@@ -1,0 +1,11 @@
+# Credentials and secrets - never commit these
+config/.claude/credentials.json
+config/.claude/settings.json
+config/.claude/projects/
+config/.claude.json
+
+# Logs
+logs/
+
+# SrvAny binary
+srvany.exe
