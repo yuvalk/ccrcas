@@ -124,9 +124,22 @@ $wrapperContent = @"
 REM Claude Code Service Wrapper
 REM This script is invoked by SrvAny to start Claude Code.
 
-SET CLAUDE_HOME=$InstallDir\config
+REM Point HOME and config to the service directory so Claude Code
+REM finds OAuth tokens and settings here instead of a user profile.
 SET HOME=$InstallDir\config
+SET USERPROFILE=$InstallDir\config
 SET CLAUDE_CONFIG_DIR=$InstallDir\config\.claude
+
+REM OAuth tokens are stored under HOME/.claude by Claude Code.
+REM The authenticate.ps1 script copies them here after interactive login.
+REM Claude Code will auto-refresh OAuth tokens when possible.
+
+REM Uncomment and set if behind a corporate proxy:
+REM SET HTTPS_PROXY=http://proxy.corp:8080
+REM SET NODE_EXTRA_CA_CERTS=C:\certs\corp-ca.pem
+
+REM Uncomment to use an API key instead of OAuth:
+REM SET ANTHROPIC_API_KEY=sk-ant-api03-...
 
 REM Log output
 SET LOG_DIR=$InstallDir\logs
@@ -134,6 +147,7 @@ SET LOG_FILE=%LOG_DIR%\claude-code-%DATE:~-4%%DATE:~4,2%%DATE:~7,2%.log
 
 echo [%DATE% %TIME%] Starting Claude Code service >> "%LOG_FILE%" 2>&1
 "$ClaudeExePath" $ClaudeArgs >> "%LOG_FILE%" 2>&1
+echo [%DATE% %TIME%] Claude Code exited with code %ERRORLEVEL% >> "%LOG_FILE%" 2>&1
 "@
 Set-Content -Path $wrapperPath -Value $wrapperContent -Encoding ASCII
 Write-Host "[OK] Wrapper script created: $wrapperPath" -ForegroundColor Green
@@ -233,8 +247,9 @@ Write-Host "Config directory  : $InstallDir\config"
 Write-Host "Log directory     : $InstallDir\logs"
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
-Write-Host "  1. Copy your .claude/ folder into $InstallDir\config\"
-Write-Host "  2. Verify credentials in $InstallDir\config\.claude\"
+Write-Host "  1. Authenticate (OAuth with Google):"
+Write-Host "       .\authenticate.ps1 -ServiceUser $ServiceUser"
+Write-Host "  2. Or set ANTHROPIC_API_KEY in $wrapperPath"
 Write-Host "  3. Start the service:"
 Write-Host "       net start $ServiceName"
 Write-Host "  4. Check logs at $InstallDir\logs\"

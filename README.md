@@ -1,6 +1,8 @@
 # Claude Code as a Windows Service (ccrcas)
 
-Run [Claude Code](https://docs.anthropic.com/en/docs/claude-code) as a Windows service using **SrvAny** from the Windows Server Resource Kit. The service runs under a dedicated local user account, with configuration and credentials isolated in a known directory.
+Run [Claude Code](https://docs.anthropic.com/en/docs/claude-code) as a Windows service using **SrvAny** from the Windows Server Resource Kit. The service runs under a dedicated local user account and authenticates with Anthropic via **OAuth (Google account sign-in)**.
+
+Configuration and OAuth tokens are isolated in a dedicated service directory (`C:\ClaudeCode` by default), so the service runs independently of any user session.
 
 ## Prerequisites
 
@@ -12,7 +14,16 @@ Run [Claude Code](https://docs.anthropic.com/en/docs/claude-code) as a Windows s
    - Download the Resource Kit, or obtain `srvany.exe` separately
    - Place it next to the install script or note its full path
 4. **Administrator access** on the target machine
-5. **A valid Anthropic API key** or existing Claude Code authentication
+5. **An Anthropic account** with Google sign-in (OAuth) configured
+
+## Project Files
+
+| File | Purpose |
+|---|---|
+| `install-service.ps1` | Creates the ClaudeCode Windows service, directories, and registry entries |
+| `uninstall-service.ps1` | Removes the service (optionally removes all files) |
+| `authenticate.ps1` | Handles interactive OAuth login and copies tokens to the service directory |
+| `claude-code-wrapper.bat` | Template wrapper script that SrvAny executes |
 
 ## Directory Layout
 
@@ -23,18 +34,18 @@ C:\ClaudeCode\
   srvany.exe                    # Service helper binary
   claude-code-wrapper.bat       # Wrapper script invoked by SrvAny
   config\                       # Acts as HOME for the service process
-    .claude\                    # Claude Code configuration
-      credentials.json          # Your API credentials (copy here)
-      settings.json             # Your Claude Code settings (copy here)
+    .claude\                    # Claude Code config + OAuth tokens
+      credentials.json          # OAuth tokens (created by authenticate.ps1)
+      settings.json             # Claude Code settings
   logs\                         # Service log output
     claude-code-YYYYMMDD.log
 ```
 
 ## Step-by-Step Installation
 
-### Step 1: Create a Local Service Account (Recommended)
+### Step 1: Create a Local Service Account
 
-Open an **elevated PowerShell** or **Computer Management** console:
+Open an **elevated PowerShell** prompt:
 
 ```powershell
 # Create a local user for the service
@@ -51,6 +62,8 @@ Then grant the **Log on as a service** right:
 3. Double-click **Log on as a service**
 4. Click **Add User or Group**, type `claude-svc`, click OK
 5. Click OK to save
+
+> **Important:** Log in to Windows as `claude-svc` at least once (e.g., via RDP or `runas`) so that Windows creates the user profile directory. This is required before running `authenticate.ps1`.
 
 ### Step 2: Run the Install Script
 
@@ -83,33 +96,53 @@ cd C:\path\to\ccrcas
 | `-ClaudeExePath` | Auto-detect | Full path to the `claude` CLI binary |
 | `-ClaudeArgs` | *(empty)* | Arguments passed to `claude` (e.g., `--print`) |
 
-### Step 3: Copy Your Configuration and Credentials
+### Step 3: Authenticate with Anthropic (OAuth / Google)
 
-Copy your Claude Code authentication into the service's config directory:
+Claude Code authenticates via a browser-based OAuth flow (Google sign-in). Since a Windows service cannot open a browser, you must authenticate interactively first, then copy the tokens to the service directory.
 
-```powershell
-# Copy the entire .claude directory
-Copy-Item -Recurse "$env:USERPROFILE\.claude\*" "C:\ClaudeCode\config\.claude\"
-```
-
-**Or**, if you prefer using an API key directly, edit the wrapper script:
-
-```batch
-REM In C:\ClaudeCode\claude-code-wrapper.bat, add before the claude command:
-SET ANTHROPIC_API_KEY=sk-ant-api03-...
-```
-
-### Step 4: Verify File Permissions
-
-Ensure the service account can read the config directory:
+The `authenticate.ps1` script handles this:
 
 ```powershell
+# Run from an elevated PowerShell prompt
+.\authenticate.ps1 -ServiceUser "claude-svc"
+```
+
+**What this does:**
+
+1. Opens a command prompt running as the `claude-svc` user
+2. You run `claude auth login` in that prompt
+3. A browser window opens for Google OAuth sign-in
+4. You sign in with your Google account linked to your Anthropic account
+5. After successful auth, close the command prompt
+6. The script copies the resulting OAuth tokens from `claude-svc`'s profile into `C:\ClaudeCode\config\.claude\`
+7. Sets file permissions so the service can read the tokens
+
+> **Note:** Claude Code stores OAuth refresh tokens that allow it to obtain new access tokens automatically. As long as the refresh token remains valid, the service can authenticate without user interaction.
+
+#### Manual alternative
+
+If the script doesn't work in your environment, you can do it manually:
+
+```powershell
+# Open a shell as the service user
+runas /user:claude-svc cmd
+
+# In that prompt:
+claude auth login
+# Complete the Google OAuth flow in the browser
+
+# After auth succeeds, copy the tokens:
+exit
+```
+
+Then copy the tokens to the service directory:
+
+```powershell
+Copy-Item -Recurse "C:\Users\claude-svc\.claude\*" "C:\ClaudeCode\config\.claude\" -Force
 icacls "C:\ClaudeCode" /grant "claude-svc:(OI)(CI)RX" /T
 ```
 
-This grants read and execute permissions recursively.
-
-### Step 5: Start the Service
+### Step 4: Start the Service
 
 ```powershell
 # Start the service
@@ -121,7 +154,7 @@ Get-Service ClaudeCode
 
 You can also start/stop from the Services GUI (`services.msc`).
 
-### Step 6: Check the Logs
+### Step 5: Check the Logs
 
 ```powershell
 # View today's log
@@ -162,6 +195,25 @@ Get-EventLog -LogName System -Source "Service Control Manager" |
     Select-Object -First 10
 ```
 
+## Re-authenticating (Token Refresh)
+
+OAuth tokens expire. Claude Code automatically refreshes tokens using the stored refresh token when possible. If auto-refresh fails (e.g., the refresh token was revoked, or the Google session expired), you need to re-authenticate:
+
+```powershell
+# Re-run the authentication script
+.\authenticate.ps1 -ServiceUser "claude-svc"
+```
+
+The script will detect if the service is running and offer to restart it after copying new tokens.
+
+### Signs that re-authentication is needed
+
+Check the service logs for messages like:
+- `Authentication failed`
+- `Token expired`
+- `401 Unauthorized`
+- `Please log in`
+
 ## Uninstalling
 
 ```powershell
@@ -178,34 +230,26 @@ Get-EventLog -LogName System -Source "Service Control Manager" |
 
 SrvAny expects the wrapped application to keep running. If `claude` exits immediately, the service will report a timeout. Common causes:
 
-- **Missing credentials**: Verify `C:\ClaudeCode\config\.claude\credentials.json` exists and is valid
-- **Missing API key**: Set `ANTHROPIC_API_KEY` in the wrapper batch file
-- **Wrong executable path**: Check the registry at `HKLM\SYSTEM\CurrentControlSet\Services\ClaudeCode\Parameters` that `Application` points to the correct wrapper
+- **Missing OAuth tokens**: Run `authenticate.ps1` to complete the Google sign-in flow
+- **Expired tokens**: Re-authenticate with `authenticate.ps1 -ServiceUser "claude-svc"`
+- **Wrong executable path**: Check the registry (see below) that `Application` points to the correct wrapper
 
-### Service starts but claude errors appear in logs
+### Service starts but auth errors appear in logs
 
 Check `C:\ClaudeCode\logs\` for the latest log file. Common issues:
 
-- **Authentication failure**: Re-authenticate by running `claude` interactively as the service user, then copy the updated credentials
-- **Network/proxy**: If behind a corporate proxy, add `SET HTTPS_PROXY=...` to the wrapper batch file
+- **OAuth token expired**: Re-run `authenticate.ps1`
+- **Network/proxy**: If behind a corporate proxy, edit `C:\ClaudeCode\claude-code-wrapper.bat` and uncomment/set `HTTPS_PROXY`
 - **Node.js not in PATH**: The service runs with a minimal environment. Add the full path to `node.exe` parent directory to the system PATH, or set it in the wrapper
 
-### How to re-authenticate
+### User profile not created
 
-If credentials expire, re-authenticate as the service user:
+If `authenticate.ps1` fails with "Claude config directory not found", the service user's Windows profile hasn't been created yet. Log in to Windows as `claude-svc` at least once:
 
 ```powershell
-# Open a shell as the service user
 runas /user:claude-svc cmd
-
-# In that shell, run claude to authenticate
-claude auth login
-
-# Copy the updated credentials back
-copy "%USERPROFILE%\.claude\credentials.json" "C:\ClaudeCode\config\.claude\"
+# Just typing 'exit' is enough - the profile is created on first login
 ```
-
-Then restart the service: `net stop ClaudeCode && net start ClaudeCode`
 
 ### Verifying the registry configuration
 
@@ -227,7 +271,6 @@ You should see:
 Edit `C:\ClaudeCode\claude-code-wrapper.bat` to add any environment variables the service needs:
 
 ```batch
-SET ANTHROPIC_API_KEY=sk-ant-...
 SET HTTPS_PROXY=http://proxy.corp:8080
 SET NODE_EXTRA_CA_CERTS=C:\certs\corp-ca.pem
 ```
@@ -235,16 +278,18 @@ SET NODE_EXTRA_CA_CERTS=C:\certs\corp-ca.pem
 ## How It Works
 
 1. **SrvAny** is a generic service wrapper: Windows SCM starts `srvany.exe`, which reads `Application` and `AppDirectory` from its registry `Parameters` subkey and launches that process
-2. The `Application` points to `claude-code-wrapper.bat`, which sets environment variables (`HOME`, `CLAUDE_CONFIG_DIR`) so Claude Code reads config from the service directory instead of a user profile
-3. Claude Code runs with the credentials and settings found in `C:\ClaudeCode\config\.claude\`
-4. Output is redirected to daily log files in `C:\ClaudeCode\logs\`
+2. The `Application` points to `claude-code-wrapper.bat`, which overrides `HOME` and `USERPROFILE` to point at the service directory, so Claude Code reads OAuth tokens from there instead of a user profile
+3. **OAuth flow**: `authenticate.ps1` runs the browser-based Google sign-in interactively as the service user, then copies the resulting tokens (including the refresh token) into the service config directory
+4. At runtime, Claude Code uses the stored refresh token to obtain fresh access tokens automatically, without needing a browser
+5. Output is redirected to daily log files in `C:\ClaudeCode\logs\`
 
 ## Security Notes
 
-- **Never commit credentials** to version control. The `.gitignore` in this repo excludes credential files
+- **Never commit OAuth tokens** to version control. The `.gitignore` in this repo excludes credential files
 - Use a **dedicated service account** with minimal privileges rather than LocalSystem
 - Restrict file permissions on `C:\ClaudeCode\config\` to the service account and administrators only
-- Rotate API keys periodically and update them in the service config directory
+- The OAuth refresh token grants ongoing access to the Anthropic API on behalf of the signed-in Google account. Protect it like a password
+- If you suspect token compromise, revoke access from your [Google account security settings](https://myaccount.google.com/permissions) and re-authenticate
 
 ## License
 

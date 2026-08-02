@@ -1,31 +1,34 @@
 Claude Code Service - Configuration Directory
 ==============================================
 
-Copy your Claude Code configuration and authentication files here.
+This directory acts as HOME for the Claude Code service process.
+The service reads OAuth tokens and settings from here instead of
+a user profile directory.
 
-This directory acts as HOME for the Claude Code process running
-as a Windows service. The service looks here for all config and
-credentials instead of a user profile directory.
+DO NOT manually copy files here. Instead, run:
 
-Files you need to copy from your user profile
-----------------------------------------------
+    .\authenticate.ps1 -ServiceUser "claude-svc"
 
-From %USERPROFILE%\.claude\ copy to config\.claude\:
+The script handles the interactive Google OAuth sign-in and copies
+the resulting tokens (including the refresh token) into this directory
+automatically.
 
-  credentials.json       - API key or OAuth authentication credentials
-  settings.json          - Claude Code settings (model, permissions, etc.)
-  projects\              - Project-specific settings and CLAUDE.md overrides
+What gets stored here after authentication
+------------------------------------------
 
-If you use an API key directly, you can also set it via environment
-variable in the wrapper batch file instead of copying credentials:
+  .claude/
+    credentials.json   - OAuth tokens (access + refresh token)
+    settings.json      - Claude Code settings
+    auth.json          - Additional auth state (if present)
 
-  SET ANTHROPIC_API_KEY=sk-ant-...
+The OAuth refresh token allows Claude Code to obtain fresh access
+tokens without a browser, so the service can authenticate on its own.
 
-Where are the originals?
-------------------------
+Re-authentication
+-----------------
 
-  Windows:  %USERPROFILE%\.claude\
-  Example:  C:\Users\YourName\.claude\
+If tokens expire and auto-refresh fails, re-run authenticate.ps1.
+Check the service logs for "401", "Token expired", or "Please log in".
 
 After copying, verify that the service account has read access to
 all files in this directory.
