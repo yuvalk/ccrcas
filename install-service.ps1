@@ -187,6 +187,13 @@ if ($ServiceUser) {
     & sc.exe config $ServiceName obj= "$ServiceUser" password= "$ServicePassword" | Out-Null
     Write-Host "[OK] Service configured to run as: $ServiceUser" -ForegroundColor Green
 
+    # Make the service user the owner of the install directory and grant full control
+    $userName = $ServiceUser -replace '^\.\\', ''
+    & takeown /F $InstallDir /R /A /D Y 2>&1 | Out-Null
+    & icacls $InstallDir /setowner "$userName" /T /Q 2>&1 | Out-Null
+    & icacls $InstallDir /grant "${userName}:(OI)(CI)F" /T /Q 2>&1 | Out-Null
+    Write-Host "[OK] '$userName' set as owner of $InstallDir with full control" -ForegroundColor Green
+
     # Grant logon-as-a-service right
     Write-Host "     (Ensure '$ServiceUser' has 'Log on as a service' right via Local Security Policy)" -ForegroundColor DarkYellow
 } else {
